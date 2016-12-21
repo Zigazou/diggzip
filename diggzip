@@ -1,0 +1,22 @@
+#!/bin/bash
+input="$1"
+[ -r "$input" ] || (echo 'A valid file path is required!' >&2 && exit 1)
+
+magic="$(printf '\037\213\010')"
+
+printf 'Looking for GZip files in %s...\n' "$input" >&2
+grep --text --only-matching --byte-offset --fixed-strings -- "$magic" "$input" \
+  | egrep --only-matching '[0-9]+' \
+  | while read offset
+do
+  (dd skip="$offset" if="$input" iflag=skip_bytes | gunzip --test) 2> /dev/null
+
+  [ "$?" == 1 ] && continue
+
+  printf -- '- GZip file at %d\n' "$offset" >&2
+  dd skip="$offset" if="$input" iflag=skip_bytes 2> /dev/null \
+    | gunzip --quiet \
+    | gzip -9 > "diggzip.$offset.gz"
+  printf '  recompressed as diggzip.%d.gz\n' "$offset" >&2
+done
+
